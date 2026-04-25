@@ -479,7 +479,7 @@ app.post("/api/payments/paypal", async (req, res) => {
           },
         ],
         application_context: {
-          return_url: `${frontendUrl}/payment/success?provider=paypal&payment_id={id}`,
+          return_url: `${frontendUrl}/payment/success?provider=paypal`,
           cancel_url: `${frontendUrl}/payment/failure?provider=paypal`,
           user_action: "PAY_NOW",
         },
