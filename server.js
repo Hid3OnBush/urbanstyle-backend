@@ -9,7 +9,6 @@ import Stripe from "stripe";
 dotenv.config();
 
 const app = express();
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 app.use(cors());
@@ -45,7 +44,12 @@ app.post("/api/auth/register", async (req, res) => {
       role: "customer",
     });
   } catch (error) {
-    res.status(500).json({ message: "Error al registrar usuario", error });
+    console.error("Error registro:", error);
+    res.status(500).json({
+      message: "Error al registrar usuario",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -80,7 +84,7 @@ app.post("/api/auth/login", async (req, res) => {
         id: user.id,
         role: user.role,
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "urbanstyle_secret",
       { expiresIn: "7d" }
     );
 
@@ -98,13 +102,27 @@ app.post("/api/auth/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Error al iniciar sesión", error });
+    console.error("Error login:", error);
+    res.status(500).json({
+      message: "Error al iniciar sesión",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
 app.get("/api/products", async (req, res) => {
-  const [products] = await db.query("SELECT * FROM products ORDER BY id DESC");
-  res.json(products);
+  try {
+    const [products] = await db.query("SELECT * FROM products ORDER BY id DESC");
+    res.json(products);
+  } catch (error) {
+    console.error("ERROR REAL /api/products:", error);
+    res.status(500).json({
+      message: "Error obteniendo productos",
+      error: error.message,
+      code: error.code,
+    });
+  }
 });
 
 app.post("/api/products", async (req, res) => {
@@ -118,7 +136,12 @@ app.post("/api/products", async (req, res) => {
 
     res.json({ id: result.insertId, name, price, image, category, description });
   } catch (error) {
-    res.status(500).json({ message: "Error al crear producto", error });
+    console.error("Error crear producto:", error);
+    res.status(500).json({
+      message: "Error al crear producto",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -133,7 +156,12 @@ app.put("/api/products/:id", async (req, res) => {
 
     res.json({ message: "Producto actualizado" });
   } catch (error) {
-    res.status(500).json({ message: "Error al actualizar producto", error });
+    console.error("Error actualizar producto:", error);
+    res.status(500).json({
+      message: "Error al actualizar producto",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -142,7 +170,12 @@ app.delete("/api/products/:id", async (req, res) => {
     await db.query("DELETE FROM products WHERE id=?", [req.params.id]);
     res.json({ message: "Producto eliminado" });
   } catch (error) {
-    res.status(500).json({ message: "Error al eliminar producto", error });
+    console.error("Error eliminar producto:", error);
+    res.status(500).json({
+      message: "Error al eliminar producto",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -240,7 +273,11 @@ app.post("/api/orders", async (req, res) => {
     });
   } catch (error) {
     console.error("Error creando pedido:", error);
-    res.status(500).json({ message: "Error creando pedido", error });
+    res.status(500).json({
+      message: "Error creando pedido",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -265,7 +302,11 @@ app.get("/api/orders", async (req, res) => {
     res.json(ordersWithItems);
   } catch (error) {
     console.error("Error obteniendo pedidos:", error);
-    res.status(500).json({ message: "Error obteniendo pedidos", error });
+    res.status(500).json({
+      message: "Error obteniendo pedidos",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -295,7 +336,8 @@ app.get("/api/orders/user/:email", async (req, res) => {
     console.error("Error obteniendo pedidos del usuario:", error);
     res.status(500).json({
       message: "Error obteniendo pedidos del usuario",
-      error,
+      error: error.message,
+      code: error.code,
     });
   }
 });
@@ -322,13 +364,20 @@ app.put("/api/orders/:id", async (req, res) => {
     res.json({ message: "Pedido actualizado correctamente" });
   } catch (error) {
     console.error("Error actualizando pedido:", error);
-    res.status(500).json({ message: "Error actualizando pedido", error });
+    res.status(500).json({
+      message: "Error actualizando pedido",
+      error: error.message,
+      code: error.code,
+    });
   }
 });
 
 app.post("/api/payments/stripe", async (req, res) => {
   try {
     const { items } = req.body;
+
+    const frontendUrl =
+      process.env.FRONTEND_URL || "http://localhost:5173";
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -343,30 +392,34 @@ app.post("/api/payments/stripe", async (req, res) => {
         },
         quantity: Number(item.quantity),
       })),
-      success_url:
-        "http://localhost:5173/payment/success?payment_id={CHECKOUT_SESSION_ID}&status=approved&provider=stripe",
-      cancel_url: "http://localhost:5173/payment/failure?provider=stripe",
+      success_url: `${frontendUrl}/payment/success?payment_id={CHECKOUT_SESSION_ID}&status=approved&provider=stripe`,
+      cancel_url: `${frontendUrl}/payment/failure?provider=stripe`,
     });
 
     res.json({ url: session.url });
   } catch (error) {
     console.error("Error Stripe:", error);
-    res.status(500).json({ message: "Error creando pago con Stripe", });
+    res.status(500).json({
+      message: "Error creando pago con Stripe",
+      error: error.message,
+    });
   }
+});
 
-  app.get("/api/payments/stripe/session/:id", async (req, res) => {
+app.get("/api/payments/stripe/session/:id", async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.retrieve(req.params.id);
 
     res.json({
-      status: session.payment_status, // "paid" o "unpaid"
+      status: session.payment_status,
     });
   } catch (error) {
     console.error("Error verificando Stripe:", error);
-    res.status(500).json({ message: "Error verificando Stripe" });
+    res.status(500).json({
+      message: "Error verificando Stripe",
+      error: error.message,
+    });
   }
-});
-
 });
 
 const PAYPAL_BASE_URL = "https://api-m.sandbox.paypal.com";
@@ -404,6 +457,9 @@ app.post("/api/payments/paypal", async (req, res) => {
       });
     }
 
+    const frontendUrl =
+      process.env.FRONTEND_URL || "http://localhost:5173";
+
     const accessToken = await getPayPalAccessToken();
 
     const response = await fetch(`${PAYPAL_BASE_URL}/v2/checkout/orders`, {
@@ -423,10 +479,8 @@ app.post("/api/payments/paypal", async (req, res) => {
           },
         ],
         application_context: {
-          return_url:
-            "http://localhost:5173/payment/success?provider=paypal&payment_id={id}",
-          cancel_url:
-            "http://localhost:5173/payment/failure?provider=paypal",
+          return_url: `${frontendUrl}/payment/success?provider=paypal`,
+          cancel_url: `${frontendUrl}/payment/failure?provider=paypal`,
           user_action: "PAY_NOW",
         },
       }),
@@ -504,10 +558,8 @@ app.post("/api/payments/paypal/capture", async (req, res) => {
   }
 });
 
-
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
   console.log(`UrbanStyle backend en http://localhost:${PORT}`);
 });
-
